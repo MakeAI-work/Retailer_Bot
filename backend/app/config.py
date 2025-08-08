@@ -23,13 +23,13 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
     
-    # WhatsApp API
-    WHATSAPP_ACCESS_TOKEN: str = ""
-    WHATSAPP_PHONE_NUMBER_ID_INVENTORY: str = ""
-    WHATSAPP_PHONE_NUMBER_ID_INVOICE: str = ""
-    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = ""
-    WHATSAPP_API_VERSION: str = "v18.0"
+    # WhatsApp API Configuration
+    WHATSAPP_ACCESS_TOKEN: str
     WHATSAPP_API_BASE_URL: str = "https://graph.facebook.com"
+    WHATSAPP_API_VERSION: str = "v18.0"
+    WHATSAPP_PHONE_NUMBER_ID_INVENTORY: str
+    WHATSAPP_PHONE_NUMBER_ID_INVOICE: str
+    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str
     
     # File Storage
     INVOICE_STORAGE_PATH: str = "./storage/invoices"
