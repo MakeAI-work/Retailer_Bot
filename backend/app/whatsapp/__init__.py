@@ -8,12 +8,14 @@ This package contains:
 - Message parser for handling bot commands and invoice format
 - Inventory bot for stock management
 - Invoice bot for invoice generation and retailer responses
+- PDF generator for creating professional invoice documents
 """
 
 from .whatsapp_client import whatsapp_client, WhatsAppClient
 from .message_parser import message_parser, MessageParser, CommandType
 from .inventory_bot import inventory_bot, InventoryBot
 from .invoice_bot import invoice_bot, InvoiceBot
+from .pdf_generator import pdf_generator, PDFInvoiceGenerator
 
 __all__ = [
     "whatsapp_client",
@@ -24,5 +26,7 @@ __all__ = [
     "inventory_bot",
     "InventoryBot",
     "invoice_bot",
-    "InvoiceBot"
+    "InvoiceBot",
+    "pdf_generator",
+    "PDFInvoiceGenerator"
 ]

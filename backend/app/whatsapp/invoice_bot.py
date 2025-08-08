@@ -9,6 +9,7 @@ from app.models import User, Item, Sale, WhatsAppSession, SaleStatus
 from app.utils.security import verify_password
 from app.whatsapp.message_parser import message_parser, CommandType
 from app.whatsapp.whatsapp_client import whatsapp_client
+from app.whatsapp.pdf_generator import pdf_generator
 
 logger = logging.getLogger(__name__)
 
@@ -209,11 +210,50 @@ class InvoiceBot:
         db.commit()
         db.refresh(sale)
         
-        # Store pending sale for this user
-        self.pending_sales[phone_number] = sale.id
-        
-        # Generate and send invoice (for now, send text summary - PDF will be in Phase 5)
-        invoice_message = f"""🧾 *INVOICE GENERATED*
+        try:
+            # Generate PDF invoice
+            pdf_path = pdf_generator.generate_invoice_pdf(sale, user, items_sold)
+            
+            # Update sale with PDF path
+            sale.pdf_path = pdf_path
+            db.commit()
+            
+            # Send PDF via WhatsApp
+            filename = f"Invoice_INV-{sale.id:06d}.pdf"
+            await whatsapp_client.send_invoice_pdf(
+                phone_number,
+                pdf_path,
+                filename,
+                f"🧾 Invoice generated for {customer_name}\n\nTotal: ₹{total_amount:.2f}\n\nPlease reply with 'success' or 'fail'"
+            )
+            
+            # Store pending sale for this user
+            self.pending_sales[phone_number] = sale.id
+            
+            # Send confirmation message
+            confirmation_message = f"""✅ *INVOICE SENT*
+
+📋 *Sale ID:* {sale.id}
+👤 *Customer:* {customer_name}
+📦 *Item:* {item.name}
+🔢 *Quantity:* {quantity}
+💵 *Total Amount:* ₹{total_amount:.2f}
+
+📄 PDF invoice has been sent above.
+
+⏳ *Awaiting your response:*
+• Reply `success` - to confirm sale and update stock
+• Reply `fail` - to cancel sale"""
+            
+            await whatsapp_client.send_invoice_response(phone_number, confirmation_message)
+            
+            return {"success": True, "message": "Invoice PDF generated and sent"}
+            
+        except Exception as e:
+            logger.error(f"Error generating or sending PDF invoice: {e}")
+            
+            # Send fallback text invoice if PDF fails
+            invoice_message = f"""🧾 *INVOICE GENERATED* (PDF generation failed)
 
 📋 *Sale ID:* {sale.id}
 👤 *Customer:* {customer_name}
@@ -226,11 +266,16 @@ class InvoiceBot:
 
 Please reply with:
 • `success` - to confirm sale and update stock
-• `fail` - to cancel sale"""
-        
-        await whatsapp_client.send_invoice_response(phone_number, invoice_message)
-        
-        return {"success": True, "message": "Invoice generated and sent"}
+• `fail` - to cancel sale
+
+⚠️ Note: PDF generation failed, but invoice data is saved."""
+            
+            # Store pending sale for this user
+            self.pending_sales[phone_number] = sale.id
+            
+            await whatsapp_client.send_invoice_response(phone_number, invoice_message)
+            
+            return {"success": True, "message": "Invoice generated (PDF failed, text sent)"}
 
     async def _handle_retailer_success(self, db: Session, user: User, phone_number: str) -> Dict[str, Any]:
         """Handle retailer success response"""

@@ -1,8 +1,9 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 import json
+import logging
 
 from app.database import get_db
 from app.models import Sale, Item, User, SaleStatus
@@ -11,6 +12,10 @@ from app.schemas import (
     InvoiceRequest, SaleSearch, SaleStatusEnum, SaleItemData
 )
 from app.api.auth import get_current_user
+from app.utils.auth import get_current_user
+from app.whatsapp.pdf_generator import pdf_generator
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -310,4 +315,81 @@ def get_sales_stats(
         "failed_sales": failed_sales,
         "total_revenue": total_revenue,
         "success_rate": (successful_sales / total_sales * 100) if total_sales > 0 else 0
+    }
+
+
+@router.post("/{sale_id}/generate-pdf", response_model=Dict[str, Any])
+async def generate_sale_pdf(
+    sale_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Generate PDF invoice for a sale"""
+    # Get sale
+    sale = db.query(Sale).filter(Sale.id == sale_id).first()
+    if not sale:
+        raise HTTPException(status_code=404, detail="Sale not found")
+    
+    # Check if user owns this sale or is admin
+    if sale.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this sale")
+    
+    try:
+        # Parse items from sale
+        import json
+        items_sold = json.loads(sale.items_sold_json)
+        
+        # Generate PDF
+        pdf_path = pdf_generator.generate_invoice_pdf(sale, current_user, items_sold)
+        
+        # Update sale with PDF path
+        sale.pdf_path = pdf_path
+        db.commit()
+        
+        # Get PDF info
+        pdf_info = pdf_generator.get_invoice_info(pdf_path)
+        
+        return {
+            "success": True,
+            "message": "PDF invoice generated successfully",
+            "pdf_path": pdf_path,
+            "pdf_info": pdf_info,
+            "sale_id": sale.id
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating PDF for sale {sale_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
+
+@router.get("/{sale_id}/pdf-info", response_model=Dict[str, Any])
+async def get_sale_pdf_info(
+    sale_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get PDF invoice information for a sale"""
+    # Get sale
+    sale = db.query(Sale).filter(Sale.id == sale_id).first()
+    if not sale:
+        raise HTTPException(status_code=404, detail="Sale not found")
+    
+    # Check if user owns this sale or is admin
+    if sale.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this sale")
+    
+    if not sale.pdf_path:
+        return {
+            "success": False,
+            "message": "No PDF generated for this sale",
+            "pdf_exists": False
+        }
+    
+    pdf_info = pdf_generator.get_invoice_info(sale.pdf_path)
+    
+    return {
+        "success": True,
+        "sale_id": sale.id,
+        "pdf_path": sale.pdf_path,
+        "pdf_info": pdf_info
     }

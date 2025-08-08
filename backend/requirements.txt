@@ -19,7 +19,6 @@ httpx==0.25.2
 
 # PDF Generation
 reportlab==4.0.7
-Pillow==10.1.0
 
 # Environment and Configuration
 python-dotenv==1.0.0
